@@ -462,11 +462,19 @@ def build_local(app, build, vcs, build_dir, output_dir, log_dir, srclib_dir, ext
         If no Android NDK version could be found and the build isn't run in a
         builder VM, the selected Android NDK is not a directory.
     """
+    # We only need Gradle
+    if build.build_method() != 'gradle':
+        # sendres(app.id, build.versionCode, "non-gradle")
+        logging.info("We do not need non-gradle...")
+        exit()
+    # sendres(app.id, build.versionCode, "begin")
+    
     ndk_path = build.ndk_path()
     if build.ndk or (build.buildjni and build.buildjni != ['no']):
         if not ndk_path:
             logging.warning("Android NDK version '%s' could not be found!" % build.ndk)
             logging.warning("Configured versions:")
+            # sendres(app.id, build.versionCode, f"NDK version {build.ndk} not found")
             for k, v in config['ndk_paths'].items():
                 if k.endswith("_orig"):
                     continue
@@ -700,6 +708,24 @@ def build_local(app, build, vcs, build_dir, output_dir, log_dir, srclib_dir, ext
 
     elif bmethod == 'gradle':
         logging.info("Building Gradle project...")
+        
+        # Additional Part for Dependencies
+        logging.info("Detecting Dependencies & ThirdPartyLibs...")
+        tmp = build.gradle
+        if tmp == ['yes']:
+            s = "release"
+        else:
+            s = tmp[0] + 'Release'
+        cmd0 = [config['gradle'], "-q", ":app:dependencies", "--configuration", s + "RuntimeClasspath"]
+        p = FDroidPopen(cmd0, cwd=root_dir, envs={"GRADLE_VERSION_DIR": config['gradle_version_dir'], "CACHEDIR": config['cachedir']})
+
+        filename = "{appid}_{versioncode}".format(appid=app.id, versioncode=build.versionCode)
+        if(not os.path.isdir("dependence")):
+            os.mkdir("dependence")
+        with open(os.path.join("dependence", filename), "w") as file:
+            file.write(p.output)
+        # sendres(app.id, build.versionCode, "dependence success")
+        
 
         cmd = [config['gradle']]
         if build.gradleprops:
