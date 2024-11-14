@@ -52,6 +52,9 @@ except ImportError:
 buildserverid = None
 ssh_channel = None
 
+def sendlog(tag, id, versioncode, msg):
+    with open('/hdd/fdroid.log', 'a+') as f:
+        f.write(tag + ' ' + str([id, versioncode, msg]) + '\n')
 
 # Note that 'force' here also implies test mode.
 def build_server(app, build, vcs, build_dir, output_dir, log_dir, force):
@@ -462,19 +465,20 @@ def build_local(app, build, vcs, build_dir, output_dir, log_dir, srclib_dir, ext
         If no Android NDK version could be found and the build isn't run in a
         builder VM, the selected Android NDK is not a directory.
     """
+    
     # We only need Gradle
     if build.build_method() != 'gradle':
-        # sendres(app.id, build.versionCode, "non-gradle")
+        sendlog("[x]", app.id, build.versionCode, "non-gradle")
         logging.info("We do not need non-gradle...")
         exit()
-    # sendres(app.id, build.versionCode, "begin")
     
+    sendlog("[*]", app.id, build.versionCode, "START")
     ndk_path = build.ndk_path()
     if build.ndk or (build.buildjni and build.buildjni != ['no']):
         if not ndk_path:
             logging.warning("Android NDK version '%s' could not be found!" % build.ndk)
             logging.warning("Configured versions:")
-            # sendres(app.id, build.versionCode, f"NDK version {build.ndk} not found")
+            sendlog("[-]", app.id, build.versionCode, f"NDK version {build.ndk} not found")
             for k, v in config['ndk_paths'].items():
                 if k.endswith("_orig"):
                     continue
@@ -517,6 +521,7 @@ def build_local(app, build, vcs, build_dir, output_dir, log_dir, srclib_dir, ext
             f.write(common.get_android_tools_version_log())
     else:
         if build.sudo:
+            sendlog("[-]", app.id, build.versionCode, "sudo-ignored")
             logging.warning('%s:%s runs this on the buildserver with sudo:\n\t%s\nThese commands were skipped because fdroid build is not running on a dedicated build server.'
                             % (app.id, build.versionName, build.sudo))
 
@@ -569,6 +574,7 @@ def build_local(app, build, vcs, build_dir, output_dir, log_dir, srclib_dir, ext
         p = FDroidPopen(['ant', 'clean'], cwd=root_dir)
 
     if p is not None and p.returncode != 0:
+        sendlog("[x]", app.id, build.versionCode, "clean-failed")
         raise BuildException("Error cleaning %s:%s" %
                              (app.id, build.versionName), p.output)
 
@@ -724,7 +730,10 @@ def build_local(app, build, vcs, build_dir, output_dir, log_dir, srclib_dir, ext
             os.mkdir("dependence")
         with open(os.path.join("dependence", filename), "w") as file:
             file.write(p.output)
-        # sendres(app.id, build.versionCode, "dependence success")
+        if(os.path.getsize(os.path.join("dependence", filename))):
+            sendlog("[+]", app.id, build.versionCode, "dependence success")
+        else:
+            sendlog("[x]", app.id, build.versionCode, "dependence failed")
         
 
         cmd = [config['gradle']]
@@ -755,6 +764,7 @@ def build_local(app, build, vcs, build_dir, output_dir, log_dir, srclib_dir, ext
     if p is not None and p.returncode != 0:
         raise BuildException("Build failed for %s:%s@%s" % (app.id, build.versionName, commit_id),
                              p.output)
+    sendlog("[*]", app.id, build.versionCode, "SUCCESS")
     logging.info("Successfully built version {versionName} of {appid} from {commit_id}"
                  .format(versionName=build.versionName, appid=app.id, commit_id=commit_id))
 
